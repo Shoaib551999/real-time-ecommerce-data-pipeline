@@ -1,5 +1,9 @@
 # Real-Time E-Commerce Data Engineering Pipeline
 
+
+[![Python Automated Tests](https://github.com/Shoaib551999/real-time-ecommerce-data-pipeline/actions/workflows/tests.yml/badge.svg)](https://github.com/Shoaib551999/real-time-ecommerce-data-pipeline/actions/workflows/tests.yml)
+
+
 ## Project Overview
 
 This project demonstrates an end-to-end real-time data engineering pipeline that processes simulated e-commerce orders using Apache Kafka, PySpark Structured Streaming, PostgreSQL, and Grafana.
