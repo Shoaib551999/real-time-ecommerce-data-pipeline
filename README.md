@@ -184,3 +184,32 @@ flowchart TD
 The dashboard visualizes real-time e-commerce sales data processed through Apache Kafka, PySpark Structured Streaming, and PostgreSQL.
 
 ![Real-Time E-Commerce Grafana Dashboard](screenshots/grafana-dashboard.png)
+
+
+
+## Automated Testing
+
+This project uses Pytest to validate e-commerce order data before it enters the streaming pipeline.
+
+### Test Coverage
+
+- Valid order validation
+- Invalid quantity detection
+- Missing required field detection
+- Incorrect total amount detection
+
+### Install Testing Dependencies
+
+```bash
+python -m pip install -r requirements-dev.txt
+```
+
+### Run Tests
+
+```bash
+python -m pytest tests/ -v
+```
+
+### Latest Test Results
+
+All 4 order validation tests passed successfully.
