@@ -166,6 +166,18 @@ The pipeline was tested by generating five confirmed orders.
 This validates the core ingestion, streaming, storage, and visualization components.
 
 
+## Pipeline Architecture
+
+```mermaid
+flowchart TD
+    A[Python Order Generator] --> B[Apache Kafka]
+    B --> C[PySpark Structured Streaming]
+    C --> D[PostgreSQL]
+    D --> E[Grafana Dashboard]
+```
+
+
+
 
 ## Grafana Dashboard
 
