@@ -3,8 +3,17 @@ import os
 import logging
 
 from db_writer import save_orders
+from data_quality import get_valid_order_condition
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import from_json, col
+from pyspark.sql.functions import (
+    from_json,
+    col,
+    lit,
+    to_json,
+    struct,
+    abs as spark_abs,
+    round as spark_round
+)
 from pyspark.sql.types import (
     StructType,
     StructField,
@@ -62,7 +71,8 @@ kafka_df = (
     .option("failOnDataLoss", "false")
     .load()
 )
-
+# Capture malformed JSON parsing errors
+CORRUPT_RECORD_FIELD = "_corrupt_record"
 # Define incoming order schema
 order_schema = StructType([
     StructField("order_id", StringType(), True),
@@ -76,6 +86,7 @@ order_schema = StructType([
     StructField("payment_method", StringType(), True),
     StructField("order_status", StringType(), True),
     StructField("event_timestamp", StringType(), True),
+    StructField("_corrupt_record", StringType(), True),
 ])
 
 # Convert Kafka bytes into JSON strings
@@ -87,20 +98,95 @@ json_df = kafka_df.selectExpr(
 orders_df = (
     json_df
     .select(
+        col("order_json"),
         from_json(
             col("order_json"),
-            order_schema
+            order_schema,
+            {
+                "mode": "PERMISSIVE",
+                "columnNameOfCorruptRecord": "_corrupt_record"
+            }
         ).alias("order")
     )
-    .select("order.*")
+    .select(
+        "order_json",
+        "order.*"
+    )
 )
 
-# Filter valid confirmed orders
-valid_orders = orders_df.filter(
-    (col("order_status") == "CONFIRMED") &
-    (col("product_name").isNotNull()) &
-    (col("quantity") > 0) &
-    (col("total_amount") >= 0)
+# Identify malformed JSON messages
+malformed_orders = (
+    orders_df
+    .filter(
+        col("_corrupt_record").isNotNull()
+    )
+    .select(
+        col("order_json"),
+        lit("MALFORMED_JSON").alias("rejection_reason")
+    )
+)
+
+# Shared validation rules for confirmed orders
+
+valid_order_condition = get_valid_order_condition()
+
+# Identify invalid orders for the Dead Letter Queue
+invalid_orders = orders_df.filter(
+    col("_corrupt_record").isNull() &
+    (
+        col("order_status").isNull() |
+        (~col("order_status").isin(
+            "PLACED", "CONFIRMED", "CANCELLED"
+        )) |
+        (
+            (col("order_status") == "CONFIRMED") &
+            (~valid_order_condition.eqNullSafe(True))
+        )
+    )
+)
+
+# Prepare rejected orders with a reason
+dlq_orders = invalid_orders.select(
+    col("order_id"),
+    col("order_json"),
+    col("order_status"),
+    lit("INVALID_ORDER_DATA").alias("rejection_reason")
+)
+
+# Format rejected orders for Kafka DLQ
+dlq_kafka_df = dlq_orders.select(
+    to_json(
+        struct(
+            col("order_id"),
+            col("order_json"),
+            col("order_status"),
+            col("rejection_reason")
+        )
+    ).alias("value")
+)
+
+# Format malformed JSON messages for Kafka DLQ
+malformed_kafka_df = malformed_orders.select(
+    to_json(
+        struct(
+            col("order_json"),
+            col("rejection_reason")
+        )
+    ).alias("value")
+)
+
+# Combine rejected messages into one DLQ DataFrame
+all_dlq_df = dlq_kafka_df.unionByName(
+    malformed_kafka_df.select(
+        "value"
+    )
+)
+
+# Keep only valid confirmed orders for PostgreSQL
+valid_orders = (
+    orders_df
+    .filter(valid_order_condition)
+    .drop("order_json", "_corrupt_record")
 )
 
 # Save micro-batches to PostgreSQL
@@ -135,6 +221,32 @@ def write_orders_to_postgres(batch_df, batch_id):
         )
         raise
 
+# Configuration for rejected Kafka events
+KAFKA_DLQ_TOPIC = os.getenv(
+    "KAFKA_DLQ_TOPIC",
+    "ecommerce-orders-dlq"
+)
+
+
+# Start Kafka Dead Letter Queue streaming query
+dlq_query = (
+    all_dlq_df.writeStream
+    .format("kafka")
+    .option(
+        "kafka.bootstrap.servers",
+        KAFKA_BOOTSTRAP_SERVERS
+    )
+    .option("topic", KAFKA_DLQ_TOPIC)
+    .option(
+        "checkpointLocation",
+        "checkpoints/kafka_dlq"
+    )
+    .outputMode("append")
+    .trigger(processingTime="5 seconds")
+    .start()
+)
+
+logger.info("Kafka Dead Letter Queue streaming started")
 
 # Start PostgreSQL streaming query
 postgres_query = (
