@@ -214,6 +214,28 @@ The dashboard visualizes real-time e-commerce sales data processed through Apach
 
 This project uses Pytest to validate e-commerce order data before it enters the streaming pipeline.
 
+
+## Spark Checkpoint Recovery Test
+
+Tested the pipeline's ability to recover Kafka events after Spark Streaming downtime.
+
+### Test Procedure
+
+1. Confirmed Grafana displayed 1,509 orders.
+2. Stopped Spark Structured Streaming.
+3. Published 5 new orders to Kafka while Spark was offline.
+4. Confirmed Grafana remained at 1,509 orders.
+5. Restarted Spark using its existing checkpoint.
+6. Verified Grafana increased to 1,514 orders.
+
+### Result
+
+**PASSED — All 5 pending orders were processed after Spark restarted.**
+
+This demonstrates checkpoint-based recovery following a controlled Spark shutdown.
+
+PostgreSQL also uses `ON CONFLICT (order_id) DO NOTHING` to prevent duplicate order records.
+
 ### Test Coverage
 
 - Valid order validation
