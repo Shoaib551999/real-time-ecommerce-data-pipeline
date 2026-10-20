@@ -1,6 +1,7 @@
 
 import json
 import time
+import uuid
 from confluent_kafka import Producer
 
 from advanced_order_generator import (
@@ -28,6 +29,9 @@ try:
         order_number += 1
 
         order = generate_order(order_number)
+
+# Generate a unique ID for every new order
+        order["order_id"] = f"ORD-{uuid.uuid4().hex[:12].upper()}"
         order["order_status"] = "CONFIRMED"
 
         if validate_order(order):
