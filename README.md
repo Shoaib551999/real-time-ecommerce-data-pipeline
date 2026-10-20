@@ -164,3 +164,11 @@ The pipeline was tested by generating five confirmed orders.
 - Grafana successfully displayed sales metrics from the database.
 
 This validates the core ingestion, streaming, storage, and visualization components.
+
+
+
+## Grafana Dashboard
+
+The dashboard visualizes real-time e-commerce sales data processed through Apache Kafka, PySpark Structured Streaming, and PostgreSQL.
+
+![Real-Time E-Commerce Grafana Dashboard](screenshots/grafana-dashboard.png)
