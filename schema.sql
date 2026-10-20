@@ -2,6 +2,7 @@
 
 CREATE TABLE IF NOT EXISTS orders (
     order_id VARCHAR PRIMARY KEY,
+    customer_id VARCHAR(50),
     product_id VARCHAR,
     product_name VARCHAR,
     category VARCHAR,

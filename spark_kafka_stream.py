@@ -1,5 +1,4 @@
 from db_writer import save_orders
-from pyspark.sql.functions import from_json, col, sum as spark_sum, count
 from pyspark.sql.functions import from_json, col
 from pyspark.sql.types import (
     StructType,
@@ -86,24 +85,6 @@ def write_orders_to_postgres(batch_df, batch_id):
     print(
         f"Batch {batch_id}: sent {len(orders)} orders to PostgreSQL"
     )
-# Calculate continuously updated sales by product
-sales_summary = (
-    valid_orders
-    .groupBy("product_name")
-    .agg(
-        count("*").alias("total_orders"),
-        spark_sum("quantity").alias("units_sold"),
-        spark_sum("total_amount").alias("total_revenue")
-    )
-)
-query = (
-    sales_summary.writeStream
-    .format("console")
-    .outputMode("complete")
-    .option("truncate", "false")
-    .trigger(processingTime="5 seconds")
-    .start()
-)
 postgres_query = (
     valid_orders.writeStream
     .foreachBatch(write_orders_to_postgres)
