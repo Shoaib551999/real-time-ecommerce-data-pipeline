@@ -170,6 +170,25 @@ The pipeline was tested by generating five confirmed orders.
 This validates the core ingestion, streaming, storage, and visualization components.
 
 
+
+## Environment Configuration
+
+The Spark streaming application supports environment variables for Kafka configuration.
+
+| Variable | Default Value | Description |
+|---|---|---|
+| `KAFKA_BOOTSTRAP_SERVERS` | `localhost:9092` | Kafka broker address |
+| `KAFKA_TOPIC` | `ecommerce-orders` | Kafka topic containing order events |
+| `POSTGRES_PASSWORD` | Required | PostgreSQL database password |
+
+### Example Configuration
+
+```bash
+export KAFKA_BOOTSTRAP_SERVERS=localhost:9092
+export KAFKA_TOPIC=ecommerce-orders
+```
+
+Set `POSTGRES_PASSWORD` securely before starting the pipeline. Never commit credentials to GitHub.
 ## Pipeline Architecture
 
 ```mermaid
