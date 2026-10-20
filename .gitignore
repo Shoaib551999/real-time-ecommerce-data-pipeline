@@ -32,3 +32,6 @@ metastore_db/
 # Temporary files
 *.tmp
 *.bak
+
+# Local backup files
+*_backup.py
