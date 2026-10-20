@@ -78,24 +78,28 @@ valid_orders = orders_df.filter(
     (col("quantity") > 0) &
     (col("total_amount") >= 0)
 )
-
 def write_orders_to_postgres(batch_df, batch_id):
+    batch_size = 100
+    orders = []
+    processed_count = 0
+
     try:
-        orders = [
-            row.asDict()
-            for row in batch_df.collect()
-        ]
+        for row in batch_df.toLocalIterator():
+            orders.append(row.asDict())
 
-        if not orders:
-            logger.info("Batch %s: no orders to process", batch_id)
-            return
+            if len(orders) >= batch_size:
+                save_orders(orders)
+                processed_count += len(orders)
+                orders.clear()
 
-        save_orders(orders)
+        if orders:
+            save_orders(orders)
+            processed_count += len(orders)
 
         logger.info(
             "Batch %s: processed %s orders for PostgreSQL",
             batch_id,
-            len(orders)
+            processed_count
         )
 
     except Exception:
