@@ -1,0 +1,18 @@
+
+services:
+  grafana:
+    image: grafana/grafana:latest
+    container_name: ecommerce-grafana
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    restart: unless-stopped
+  kafka:
+    image: apache/kafka:4.2.2
+    container_name: ecommerce-kafka
+    ports:
+      - "127.0.0.1:9092:9092"
+
+volumes:
+  grafana_data:
