@@ -1,22 +1,38 @@
-import logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(message)s"
-)
 
-logger = logging.getLogger(__name__)
+import os
+import logging
+
 from db_writer import save_orders
+from pyspark.sql import SparkSession
 from pyspark.sql.functions import from_json, col
 from pyspark.sql.types import (
     StructType,
     StructField,
     StringType,
     IntegerType,
-    DoubleType
+    DoubleType,
 )
-from pyspark.sql import SparkSession
 
-# Create Spark session with Kafka connector
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s"
+)
+
+logger = logging.getLogger(__name__)
+
+# Kafka configuration
+KAFKA_BOOTSTRAP_SERVERS = os.getenv(
+    "KAFKA_BOOTSTRAP_SERVERS",
+    "localhost:9092"
+)
+
+KAFKA_TOPIC = os.getenv(
+    "KAFKA_TOPIC",
+    "ecommerce-orders"
+)
+
+# Create Spark session
 spark = (
     SparkSession.builder
     .appName("EcommerceKafkaStreaming")
@@ -31,21 +47,23 @@ spark = (
 
 spark.sparkContext.setLogLevel("ERROR")
 
-print("Spark started successfully!")
+logger.info("Spark started successfully")
 
-# Read live messages from Kafka
+# Read streaming messages from Kafka
 kafka_df = (
     spark.readStream
     .format("kafka")
-    .option("kafka.bootstrap.servers", "localhost:9092")
-    .option("subscribe", "ecommerce-orders")
+    .option(
+        "kafka.bootstrap.servers",
+        KAFKA_BOOTSTRAP_SERVERS
+    )
+    .option("subscribe", KAFKA_TOPIC)
     .option("startingOffsets", "latest")
     .option("failOnDataLoss", "false")
     .load()
-    
 )
 
-# Define the structure of incoming JSON orders
+# Define incoming order schema
 order_schema = StructType([
     StructField("order_id", StringType(), True),
     StructField("customer_id", StringType(), True),
@@ -57,27 +75,35 @@ order_schema = StructType([
     StructField("total_amount", DoubleType(), True),
     StructField("payment_method", StringType(), True),
     StructField("order_status", StringType(), True),
-    StructField("event_timestamp", StringType(), True)
+    StructField("event_timestamp", StringType(), True),
 ])
 
-# Convert Kafka message bytes into JSON strings
+# Convert Kafka bytes into JSON strings
 json_df = kafka_df.selectExpr(
     "CAST(value AS STRING) AS order_json"
 )
 
-# Parse JSON using the schema
+# Parse JSON messages
 orders_df = (
     json_df
-    .select(from_json(col("order_json"), order_schema).alias("order"))
+    .select(
+        from_json(
+            col("order_json"),
+            order_schema
+        ).alias("order")
+    )
     .select("order.*")
 )
-# Keep only confirmed orders with valid sales values
+
+# Filter valid confirmed orders
 valid_orders = orders_df.filter(
     (col("order_status") == "CONFIRMED") &
     (col("product_name").isNotNull()) &
     (col("quantity") > 0) &
     (col("total_amount") >= 0)
 )
+
+# Save micro-batches to PostgreSQL
 def write_orders_to_postgres(batch_df, batch_id):
     batch_size = 100
     orders = []
@@ -109,6 +135,8 @@ def write_orders_to_postgres(batch_df, batch_id):
         )
         raise
 
+
+# Start PostgreSQL streaming query
 postgres_query = (
     valid_orders.writeStream
     .foreachBatch(write_orders_to_postgres)
@@ -121,7 +149,7 @@ postgres_query = (
     .start()
 )
 
-print("Calculating live sales by product...")
-print("Saving confirmed orders to PostgreSQL...")
+logger.info("PostgreSQL streaming pipeline started")
 
+# Keep Spark streaming
 spark.streams.awaitAnyTermination()
