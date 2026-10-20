@@ -1,3 +1,10 @@
+import logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s"
+)
+
+logger = logging.getLogger(__name__)
 from db_writer import save_orders
 from pyspark.sql.functions import from_json, col
 from pyspark.sql.types import (
@@ -71,20 +78,33 @@ valid_orders = orders_df.filter(
     (col("quantity") > 0) &
     (col("total_amount") >= 0)
 )
+
 def write_orders_to_postgres(batch_df, batch_id):
-    orders = [
-        row.asDict()
-        for row in batch_df.collect()
-    ]
+    try:
+        orders = [
+            row.asDict()
+            for row in batch_df.collect()
+        ]
 
-    if not orders:
-        return
+        if not orders:
+            logger.info("Batch %s: no orders to process", batch_id)
+            return
 
-    save_orders(orders)
+        save_orders(orders)
 
-    print(
-        f"Batch {batch_id}: sent {len(orders)} orders to PostgreSQL"
-    )
+        logger.info(
+            "Batch %s: processed %s orders for PostgreSQL",
+            batch_id,
+            len(orders)
+        )
+
+    except Exception:
+        logger.exception(
+            "Batch %s: failed to process orders",
+            batch_id
+        )
+        raise
+
 postgres_query = (
     valid_orders.writeStream
     .foreachBatch(write_orders_to_postgres)
